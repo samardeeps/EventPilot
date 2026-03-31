@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner — {{ event_name }}</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8" type="text/javascript"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{--primary:#4F46E5;--secondary:#10B981;--danger:#EF4444;--warning:#F59E0B;--surface:#FFF;--text-main:#111827;--text-muted:#6B7280;--border:#E5E7EB}
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Inter',system-ui,sans-serif;background:linear-gradient(135deg,#f0f4ff,#e5e7eb);color:var(--text-main);min-height:100vh;padding:1.5rem}
+        .container{max-width:600px;margin:0 auto;background:rgba(255,255,255,.9);backdrop-filter:blur(12px);padding:2rem;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,.06);border:1px solid rgba(255,255,255,.5)}
+        .page-header{text-align:center;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid var(--border)}
+        .page-header h1{font-size:1.4rem;font-weight:700}.page-header .meta{color:var(--text-muted);font-size:.85rem;margin-top:.3rem}
+        a.back-link{color:var(--primary);text-decoration:none;font-size:.85rem;font-weight:500}a.back-link:hover{text-decoration:underline}
+
+        .category-selector{margin-bottom:1.5rem}
+        .category-selector label{display:block;font-weight:600;font-size:.85rem;margin-bottom:.5rem;color:#374151}
+        .cat-btns{display:flex;gap:.4rem;flex-wrap:wrap}
+        .cat-btn{padding:.45rem 1rem;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-weight:600;font-size:.82rem;cursor:pointer;transition:all .2s;color:var(--text-muted)}
+        .cat-btn.active{border-color:var(--primary);background:#EEF2FF;color:var(--primary)}
+        .cat-btn:hover{border-color:var(--primary)}
+        .cat-btn.type-attendance{border-left:3px solid #3B82F6}
+        .cat-btn.type-kit{border-left:3px solid #10B981}
+        .cat-btn.type-seminar{border-left:3px solid #8B5CF6}
+        .cat-btn.type-custom{border-left:3px solid #F59E0B}
+
+        #reader{width:100%;max-width:400px;margin:0 auto 1.5rem;border-radius:12px;overflow:hidden;border:2px solid var(--border)}
+        .result-flash{text-align:center;padding:1rem 1.25rem;border-radius:10px;margin-bottom:1rem;font-weight:600;font-size:.95rem;display:none;animation:fadeIn .3s}
+        .result-flash.success{display:block;background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7}
+        .result-flash.error{display:block;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5}
+        .result-flash.warning{display:block;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+
+        .scan-log-header{display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;margin-bottom:.75rem}
+        .scan-log-header h3{font-size:1rem;font-weight:600}.scan-log-header span{color:var(--text-muted);font-size:.8rem}
+        .scan-log{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
+        .log-entry{padding:.6rem .9rem;border-bottom:1px solid #F3F4F6;display:flex;justify-content:space-between;align-items:center;font-size:.82rem}
+        .log-entry:last-child{border-bottom:none}
+        .log-entry .name{font-weight:600}.log-entry .time{color:var(--text-muted);font-size:.75rem}
+        .log-entry.fail{color:var(--danger)}
+        .log-entry .cat-tag{font-size:.7rem;background:#EEF2FF;color:var(--primary);padding:.15rem .4rem;border-radius:4px;margin-left:.3rem}
+        .log-empty{text-align:center;padding:2rem;color:var(--text-muted);font-size:.9rem}
+        .no-cat-warning{text-align:center;padding:1.5rem;background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;color:#92400E;margin-bottom:1rem}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="margin-bottom:.75rem"><a href="/manage/{{ event_id }}" class="back-link">← Back to Manage</a></div>
+        <div class="page-header">
+            <h1>📷 {{ event_name }}</h1>
+            <div class="meta">Scan QR codes to record attendance or checkpoints</div>
+        </div>
+
+        <!-- Category Selector -->
+        <div class="category-selector">
+            <label>Select Scan Category:</label>
+            <div class="cat-btns" id="catBtns">
+                <span style="color:var(--text-muted);font-size:.85rem">Loading categories...</span>
+            </div>
+        </div>
+
+        <div id="noCatWarning" class="no-cat-warning" style="display:none">
+            ⚠ Please select a scan category before scanning.
+        </div>
+
+        <div id="reader"></div>
+        <div id="resultFlash" class="result-flash"></div>
+
+        <div class="scan-log-header"><h3>Scan History</h3><span id="scanCount">0 scans</span></div>
+        <div class="scan-log" id="scanLog"><div class="log-empty">No scans yet. Point your camera at a QR code.</div></div>
+    </div>
+
+    <script>
+        const EVENT_ID = "{{ event_id }}";
+        let selectedCategoryId = null;
+        let selectedCategoryName = '';
+        let scanEntries = [];
+        let scannerInstance = null;
+
+        // ─── Load Categories ──────────────────────────────────────────
+        async function loadCategories() {
+            try {
+                const r = await fetch(`/categories/?event_id=${EVENT_ID}`);
+                const cats = await r.json();
+                const container = document.getElementById('catBtns');
+                container.innerHTML = '';
+
+                if (!cats.length) {
+                    container.innerHTML = '<span style="color:var(--text-muted)">No categories configured. Add them in the Manage page.</span>';
+                    return;
+                }
+
+                cats.forEach((c, i) => {
+                    const btn = document.createElement('button');
+                    btn.className = `cat-btn type-${c.category_type}` + (i === 0 ? ' active' : '');
+                    btn.innerText = c.name;
+                    btn.onclick = () => {
+                        document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        selectedCategoryId = c.id;
+                        selectedCategoryName = c.name;
+                        document.getElementById('noCatWarning').style.display = 'none';
+                    };
+                    container.appendChild(btn);
+                });
+
+                // Auto-select first
+                selectedCategoryId = cats[0].id;
+                selectedCategoryName = cats[0].name;
+            } catch (e) {
+                console.error('Failed to load categories', e);
+            }
+        }
+
+        // ─── Scanner Setup ────────────────────────────────────────────
+        const resultFlash = document.getElementById('resultFlash');
+
+        function initScanner() {
+            scannerInstance = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+            scannerInstance.render(onScanSuccess);
+        }
+
+        async function onScanSuccess(decodedText) {
+            scannerInstance.pause(true);
+
+            if (!selectedCategoryId) {
+                showFlash('warning', '⚠ Select a scan category first');
+                document.getElementById('noCatWarning').style.display = 'block';
+                setTimeout(() => { resultFlash.style.display = 'none'; scannerInstance.resume(); }, 1500);
+                return;
+            }
+
+            try {
+                const response = await fetch('/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        event_id: EVENT_ID,
+                        qr_id: decodedText,
+                        scan_category_id: selectedCategoryId,
+                    }),
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    showFlash('success', `✓ ${data.participant_name} — ${data.category_name}`);
+                    addLogEntry(data.participant_name, data.category_name, true);
+                } else if (response.status === 409) {
+                    showFlash('warning', `⚠ ${data.detail}`);
+                    addLogEntry('Duplicate', selectedCategoryName, false);
+                } else {
+                    showFlash('error', `✕ ${data.detail}`);
+                    addLogEntry(data.detail || 'Error', selectedCategoryName, false);
+                }
+            } catch (err) {
+                showFlash('error', '✕ Network error');
+                addLogEntry('Network error', selectedCategoryName, false);
+            }
+
+            setTimeout(() => {
+                resultFlash.className = 'result-flash';
+                resultFlash.style.display = 'none';
+                scannerInstance.resume();
+            }, 2000);
+        }
+
+        function showFlash(type, msg) {
+            resultFlash.innerText = msg;
+            resultFlash.className = 'result-flash ' + type;
+            resultFlash.style.display = 'block';
+        }
+
+        function addLogEntry(name, category, success) {
+            scanEntries.unshift({ name, category, success, time: new Date() });
+            renderLog();
+        }
+
+        function renderLog() {
+            const logEl = document.getElementById('scanLog');
+            document.getElementById('scanCount').innerText = scanEntries.length + ' scan' + (scanEntries.length !== 1 ? 's' : '');
+            if (!scanEntries.length) { logEl.innerHTML = '<div class="log-empty">No scans yet.</div>'; return; }
+            let html = '';
+            scanEntries.forEach(e => {
+                html += `<div class="log-entry${!e.success ? ' fail' : ''}">
+                    <span><span class="name">${e.success ? '✓' : '✕'} ${e.name}</span><span class="cat-tag">${e.category}</span></span>
+                    <span class="time">${e.time.toLocaleTimeString()}</span>
+                </div>`;
+            });
+            logEl.innerHTML = html;
+        }
+
+        // ─── Init ─────────────────────────────────────────────────────
+        loadCategories().then(() => initScanner());
+    </script>
+</body>
+</html>

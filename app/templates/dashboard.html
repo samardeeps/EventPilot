@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EventPilot — Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{--primary:#4F46E5;--primary-hover:#4338CA;--secondary:#10B981;--danger:#EF4444;--danger-hover:#DC2626;--warning:#F59E0B;--surface:#FFF;--text-main:#111827;--text-muted:#6B7280;--border:#E5E7EB}
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Inter',system-ui,sans-serif;background:linear-gradient(135deg,#f0f4ff 0%,#e8eaed 100%);color:var(--text-main);min-height:100vh;padding:1.5rem}
+        .container{max-width:960px;margin:0 auto;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);padding:2rem;border-radius:20px;box-shadow:0 12px 40px rgba(0,0,0,.05);border:1px solid rgba(255,255,255,.6)}
+        .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+        .header h1{font-weight:700;font-size:1.5rem;letter-spacing:-.3px}
+        .header p{color:var(--text-muted);margin-top:.15rem;font-size:.85rem}
+        .btn{padding:.45rem .95rem;border-radius:8px;text-decoration:none;font-weight:500;font-size:.82rem;border:none;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:.25rem}
+        .btn:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.08)}.btn:active{transform:translateY(0)}
+        .btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-hover)}
+        .btn-secondary{background:var(--secondary);color:#fff}
+        .btn-warning{background:var(--warning);color:#fff}
+        .btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:var(--danger-hover)}
+        .btn-ghost{background:#F3F4F6;color:#4B5563;border:1px solid var(--border)}
+
+        .event-card{background:var(--surface);border:1px solid var(--border);padding:1.25rem 1.5rem;margin-bottom:.75rem;border-radius:12px;transition:all .2s}
+        .event-card:hover{box-shadow:0 6px 16px rgba(0,0,0,.05);border-color:#D1D5DB}
+        .event-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem}
+        .event-card h3{font-size:1.05rem;font-weight:600;color:#1F2937;margin-bottom:.15rem}
+        .event-meta{color:var(--text-muted);font-size:.8rem}.event-meta span{margin-right:.75rem}
+        .badge-count{background:#EEF2FF;color:var(--primary);font-weight:600;padding:.2rem .65rem;border-radius:16px;font-size:.75rem}
+        .card-actions{display:flex;gap:.35rem;flex-wrap:wrap}
+        .empty-state{text-align:center;padding:3.5rem 2rem;background:var(--surface);border-radius:12px;border:2px dashed #D1D5DB}
+        .empty-state p{color:var(--text-muted);margin-bottom:1.25rem;font-size:.95rem}
+
+        /* Modals */
+        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(4px);display:flex;justify-content:center;align-items:center;opacity:0;visibility:hidden;transition:all .2s;z-index:50}
+        .modal-overlay.active{opacity:1;visibility:visible}
+        .modal-box{background:var(--surface);padding:1.75rem;border-radius:16px;width:100%;max-width:440px;transform:translateY(12px);transition:all .2s cubic-bezier(.4,0,.2,1);box-shadow:0 24px 48px rgba(0,0,0,.15)}
+        .modal-overlay.active .modal-box{transform:translateY(0)}
+        .modal-box h3{font-size:1.15rem;margin-bottom:1rem;font-weight:600}
+        .form-group{margin-bottom:.9rem}
+        .form-group label{display:block;margin-bottom:.3rem;font-weight:500;font-size:.82rem;color:#374151}
+        .form-group input{width:100%;padding:.6rem .8rem;border:1px solid #D1D5DB;border-radius:8px;font-family:inherit;font-size:.88rem;transition:all .15s}
+        .form-group input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.08)}
+        .modal-actions{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1.25rem}
+
+        /* Delete confirmation styles */
+        .delete-warning{background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.82rem;color:#991B1B;line-height:1.5}
+        .delete-warning strong{color:#7F1D1D}
+        .confirm-input{border-color:#FECACA !important}
+        .confirm-input:focus{border-color:var(--danger) !important;box-shadow:0 0 0 3px rgba(239,68,68,.1) !important}
+        .btn-danger-full{background:var(--danger);color:#fff;opacity:.5;pointer-events:none;width:100%;justify-content:center;padding:.6rem}
+        .btn-danger-full.enabled{opacity:1;pointer-events:auto}
+        .btn-danger-full.enabled:hover{background:var(--danger-hover)}
+
+        .toast{position:fixed;bottom:1.25rem;right:1.25rem;z-index:100;padding:.6rem 1.1rem;border-radius:10px;font-weight:500;font-size:.82rem;transform:translateY(80px);opacity:0;transition:all .3s;box-shadow:0 8px 20px rgba(0,0,0,.12)}
+        .toast.show{transform:translateY(0);opacity:1}.toast.success{background:#065F46;color:#fff}.toast.error{background:#991B1B;color:#fff}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>EventPilot</h1>
+                <p>Event Registration & Attendance Management</p>
+            </div>
+            <button class="btn btn-primary" onclick="openCreate()">+ Create Event</button>
+        </div>
+        {% if events %}
+            {% for event in events %}
+            <div class="event-card">
+                <div class="event-card-header">
+                    <div>
+                        <h3>{{ event.name }}</h3>
+                        <div class="event-meta">
+                            <span>📅 {{ event.start_date.strftime('%b %d, %Y') }} → {{ event.end_date.strftime('%b %d, %Y') }}</span>
+                            <span>📆 {{ event.num_days }} day{{ 's' if event.num_days > 1 else '' }}</span>
+                        </div>
+                    </div>
+                    <span class="badge-count">{{ event.participant_count }} participant{{ 's' if event.participant_count != 1 else '' }}</span>
+                </div>
+                <div class="card-actions">
+                    <a href="/manage/{{ event.id }}" class="btn btn-primary">👥 Manage</a>
+                    <a href="/scan/{{ event.id }}" class="btn btn-warning">📷 Scan</a>
+                    <a href="/events/{{ event.id }}/export" class="btn btn-secondary">📥 Export</a>
+                    <button class="btn btn-danger" onclick="openDelete('{{ event.id }}','{{ event.name }}')">🗑 Delete</button>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <p>No events yet. Create your first event to get started!</p>
+                <button class="btn btn-primary" onclick="openCreate()">Create Your First Event</button>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Create Event Modal -->
+    <div class="modal-overlay" id="createModal">
+        <div class="modal-box">
+            <h3>Create New Event</h3>
+            <form id="createForm" onsubmit="submitCreate(event)">
+                <div class="form-group"><label>Event Name</label><input type="text" id="eventName" required placeholder="e.g. Annual Tech Conference 2026"></div>
+                <div class="form-group"><label>Start Date</label><input type="date" id="startDate" required></div>
+                <div class="form-group"><label>End Date</label><input type="date" id="endDate" required></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-ghost" onclick="closeAll()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="createBtn">Create Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal (GitHub-style) -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal-box">
+            <h3>🗑 Delete Event</h3>
+            <div class="delete-warning">
+                ⚠️ This will <strong>permanently delete</strong> the event along with all its participants, attendance records, scan categories, and badge templates. This action <strong>cannot be undone</strong>.
+            </div>
+            <div class="form-group">
+                <label>To confirm, type the event name: <strong id="deleteEventNameLabel"></strong></label>
+                <input type="text" id="deleteConfirmInput" class="confirm-input" placeholder="Type event name to confirm" autocomplete="off" oninput="checkDeleteConfirm()">
+            </div>
+            <button class="btn btn-danger-full" id="deleteConfirmBtn" onclick="executeDelete()">
+                I understand, delete this event
+            </button>
+            <div class="modal-actions" style="margin-top:.5rem">
+                <button class="btn btn-ghost" onclick="closeAll()" style="width:100%;justify-content:center">Cancel</button>
+            </div>
+            <input type="hidden" id="deleteEventId">
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        function toast(m,t='success'){const el=document.getElementById('toast');el.innerText=m;el.className='toast '+t+' show';setTimeout(()=>el.classList.remove('show'),3500)}
+        function closeAll(){document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('active'))}
+        document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeAll()}));
+
+        // ─── Create ──────────────────────────────────────────────────
+        function openCreate(){document.getElementById('createModal').classList.add('active');document.getElementById('eventName').focus()}
+        async function submitCreate(e){
+            e.preventDefault();
+            const name=document.getElementById('eventName').value,sd=document.getElementById('startDate').value,ed=document.getElementById('endDate').value;
+            if(new Date(ed)<new Date(sd)){alert('End date must be on or after start date.');return}
+            const btn=document.getElementById('createBtn');btn.innerText='Creating...';btn.disabled=true;
+            try{
+                const r=await fetch('/events/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,start_date:new Date(sd+'T09:00:00').toISOString(),end_date:new Date(ed+'T18:00:00').toISOString()})});
+                if(r.ok)window.location.reload();else{const d=await r.json();alert('Error: '+(d.detail||'Failed'));btn.innerText='Create Event';btn.disabled=false}
+            }catch(err){alert('Network error');btn.innerText='Create Event';btn.disabled=false}
+        }
+
+        // ─── Delete (GitHub-style confirmation) ──────────────────────
+        let deleteEventName = '';
+
+        function openDelete(id, name){
+            deleteEventName = name;
+            document.getElementById('deleteEventId').value = id;
+            document.getElementById('deleteEventNameLabel').innerText = name;
+            document.getElementById('deleteConfirmInput').value = '';
+            document.getElementById('deleteConfirmBtn').classList.remove('enabled');
+            document.getElementById('deleteModal').classList.add('active');
+            document.getElementById('deleteConfirmInput').focus();
+        }
+
+        function checkDeleteConfirm(){
+            const input = document.getElementById('deleteConfirmInput').value;
+            const btn = document.getElementById('deleteConfirmBtn');
+            if(input === deleteEventName){
+                btn.classList.add('enabled');
+            } else {
+                btn.classList.remove('enabled');
+            }
+        }
+
+        async function executeDelete(){
+            const btn = document.getElementById('deleteConfirmBtn');
+            if(!btn.classList.contains('enabled')) return;
+
+            const id = document.getElementById('deleteEventId').value;
+            btn.innerText = 'Deleting...';
+            btn.style.opacity = '0.7';
+
+            try{
+                const r = await fetch(`/events/${id}`, {method: 'DELETE'});
+                if(r.ok){
+                    toast('Event deleted successfully');
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    const d = await r.json();
+                    toast(d.detail || 'Failed to delete', 'error');
+                    btn.innerText = 'I understand, delete this event';
+                    btn.style.opacity = '';
+                }
+            } catch(e){
+                toast('Network error — please try again', 'error');
+                btn.innerText = 'I understand, delete this event';
+                btn.style.opacity = '';
+            }
+        }
+    </script>
+</body>
+</html>
